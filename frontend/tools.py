@@ -9,6 +9,7 @@ import os
 from typing import Any, Dict, Callable, Awaitable
 
 import aiohttp
+from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
@@ -16,94 +17,86 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 # ---- Tool Schemas (OpenAI-style function tools) ----
 
-send_message_schema: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "send_message",
-        "description": "Send a text message to a contact.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "contact": {
-                    "type": "string",
-                    "description": "The contact name to send the message to."
+send_message_schema = FunctionSchema(
+    name="send_message",
+    description="Send a text message to a contact.",
+    properties={
+            "contact": {
+                "type": "string",
+                "description": "The contact name to send the message to."
                 },
-                "message": {
-                    "type": "string",
-                    "description": "The message body to send."
-                }
-            },
-            "required": ["contact", "message"]
-        }
-    }
-}
+            "message": {
+                "type": "string",
+                "description": "The message body to send."
+            }
+        },
+    required =  ["contact", "message"]
+    
+)
 
-request_call_schema: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "request_call",
-        "description": "Request a voice or video call with a contact.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "contact": {"type": "string", "description": "Contact to call."},
-                "call_type": {
-                    "type": "string",
-                    "enum": ["voice", "video"],
-                    "description": "Type of call to initiate."
-                }
+request_call_schema = FunctionSchema(
+    name="request_call",
+    description="Request a voice or video call with a contact.",
+    properties={
+            "contact": {
+                "type": "string",
+                "description": "Contact to call."
             },
-            "required": ["contact", "call_type"]
-        }
-    }
-}
+            "call_type": {
+                "type": "string",
+                "enum": ["voice", "video"],
+                "description": "Type of call to initiate."
+            }
+        },
+    required = ["contact", "call_type"]
+)
 
-respond_to_call_schema: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "respond_to_call",
-        "description": "Accept or reject an incoming call.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "call_id": {"type": "string", "description": "ID of the call."},
-                "accept": {"type": "boolean", "description": "True to accept, False to reject."}
+respond_to_call_schema = FunctionSchema(
+    name="respond_to_call",
+    description="Accept or reject an incoming call.",
+    properties={
+            "call_id": {
+                "type": "string",
+                "description": "ID of the call."
             },
-            "required": ["call_id", "accept"]
-        }
-    }
-}
+            "accept": {
+                "type": "boolean",
+                "description": "True to accept, False to reject."
+            }
+        },
+    required = ["call_id", "accept"]
+)
 
-end_call_schema: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "end_call",
-        "description": "End an active call.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "call_id": {"type": "string", "description": "ID of the active call."}
-            },
-            "required": ["call_id"]
-        }
-    }
-}
+end_call_schema = FunctionSchema(
+    name="end_call",
+    description="End an active call.",
+    properties={
+            "call_id": {
+                "type": "string",
+                "description": "ID of the active call."
+            }
+        },
+    required = ["call_id"]
+)
 
-get_message_history_schema: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "get_message_history",
-        "description": "Get recent message history with a contact.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "contact": {"type": "string", "description": "Contact name."},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}
+get_message_history_schema = FunctionSchema(
+    name="get_message_history",
+    description="Get recent message history with a contact.",
+    properties={
+            "contact": {
+                "type": "string",
+                "description": "Contact name."
             },
-            "required": ["contact"]
-        }
-    }
-}
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "default": 50
+            }
+        },
+    required = ["contact"]
+)
+
 
 
 tools = ToolsSchema(
