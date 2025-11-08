@@ -5,20 +5,28 @@ Uses Pipecat framework to create a voice-controlled communication assistant
 
 import os
 import asyncio
-from pipecat.frames.frames import TextFrame, EndFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
-from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
+# Deprecated aggregators removed; we'll use an OpenAI-style context aggregator to maintain turn order
 # from pipecat.services.deepgram import DeepgramSTTService
 # from pipecat.services.openai import OpenAILLMService
 # from pipecat.services.cartesia import CartesiaTTSService
 # from pipecat.transports.services.daily import DailyTransport, DailyParams
 # from pipecat.vad.silero import SileroVADAnalyzer
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+# from pipecat.services.openai.llm import OpenAILLMService
+# Prefer OpenAI-style context aggregator; fall back to legacy aggregators if not available in this environment
+try:
+    from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext  # type: ignore
+    HAS_OPENAI_CTX = True
+except Exception:  # pragma: no cover - fallback for environments without the module
+    HAS_OPENAI_CTX = False
+    from pipecat.processors.aggregators.llm_response import (
+        LLMAssistantResponseAggregator,
+        LLMUserResponseAggregator,
+    )
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -27,27 +35,11 @@ from pipecat.services.perplexity.llm import PerplexityLLMService
 import aiohttp
 from loguru import logger
 from dotenv import load_dotenv
-from tools import get_tools
-
-# Optional: run a text-only simulator when TEXT_SIMULATION is enabled
-def _maybe_run_text_simulation():
-    val = os.getenv("TEXT_SIMULATION", "").strip().lower()
-    if val in {"1", "true", "yes", "y"}:
-        try:
-            from simulate_text import main as simulate_main
-        except Exception as e:
-            print("TEXT_SIMULATION requested but simulate_text could not be imported.")
-            print(f"Reason: {e}")
-            raise
-        # Run the text simulator and exit
-        simulate_main()
-        return True
-    return False
 
 load_dotenv()
 
 # Backend API endpoint
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
 
 
 class ElderlyVoiceAgent:
@@ -124,34 +116,12 @@ async def create_daily_token(room_name: str, api_key: str) -> str:
 
 async def main():
     """Main entry point for the voice agent"""
-    # If text simulation is requested, run it and skip the voice pipeline
-    if _maybe_run_text_simulation():
-        return
 
-    # Gather Daily-related configuration
     daily_api_key = os.getenv("DAILY_API_KEY")
-    daily_room_name = os.getenv("DAILY_ROOM_NAME")  # actual room name
-    daily_domain = os.getenv("DAILY_DOMAIN")  # your Daily subdomain (e.g., 'myteam')
-    daily_room_url_env = os.getenv("DAILY_ROOM_URL")
-
-    # Create a token only if we have necessary info
-    if not daily_api_key or not daily_room_name:
-        raise ValueError(
-            "Missing DAILY_API_KEY or DAILY_ROOM_NAME. Set these or enable TEXT_SIMULATION=1 to run text-only."
-        )
-
+    daily_room_name = os.getenv("DAILY_ROOM_NAME")
     token = await create_daily_token(daily_room_name, daily_api_key)
-
-    # Resolve room URL preference order:
-    # 1) Explicit DAILY_ROOM_URL
-    # 2) Compose from DAILY_DOMAIN + DAILY_ROOM_NAME
-    # 3) Fallback to example domain (demo only)
-    if daily_room_url_env:
-        room_url = daily_room_url_env
-    elif daily_domain and daily_room_name:
-        room_url = f"https://{daily_domain}.daily.co/{daily_room_name}"
-    else:
-        room_url = f"https://example.daily.co/{daily_room_name}"
+    DAILY_ROOM_URL = "https://eldervoiceagent.daily.co/ElderlyVoiceAssistantRoom"
+    #DAILY_ROOM_URL = f"https://{daily_room_name}.daily.co"
 
     # Initialize transport (Daily for WebRTC)
     transport = DailyTransport(
@@ -164,7 +134,7 @@ async def main():
             vad_analyzer=SileroVADAnalyzer()
         ),
         token=token,
-        room_url=room_url,
+        room_url=DAILY_ROOM_URL,
         bot_name="ElderlyVoiceAssistant"
     )
 
@@ -179,8 +149,8 @@ async def main():
     llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
     # llm = OpenAILLMService(
     #     api_key=os.getenv("OPENAI_API_KEY"),
-    #     model="gpt-4",
-    #)
+    #     model="gpt-4o",
+    # )
 
     # Initialize TTS service (Cartesia)
     tts = CartesiaTTSService(
@@ -189,60 +159,63 @@ async def main():
     )
 
     # Define system prompt for elderly-friendly interaction
-    system_prompt = """You are a friendly and patient voice assistant designed specifically for elderly users. 
-Your role is to help them communicate with family and friends without needing to use phones or computers directly.
+    system_prompt = """You are a friendly and patient voice assistant for elderly users. Respond ONLY with your direct reply. 
+    Do not explain your thinking, reasoning, or processing steps.
 
-You can help them:
-1. Send text messages to their contacts (e.g., "Send a message to John saying I miss you")
-2. Request voice calls or video calls (e.g., "Call Sarah on video" or "Make a voice call to Michael")
-3. Notify them of new messages (e.g., "You have a new message from Emma")
-4. Handle incoming calls (e.g., "Accept the call from David" or "Decline the call")
+    COMMUNICATION RULES:
+    - Speak slowly and clearly
+    - Use simple, everyday language
+    - Be warm and friendly
+    - Keep responses brief and direct
 
-IMPORTANT GUIDELINES:
-- Speak slowly and clearly
-- Use simple, everyday language
-- Confirm actions before executing them
-- Be patient and repeat information if needed
-- Always confirm the person's name before sending messages or making calls
-- Provide clear feedback about what's happening
+    CAPABILITIES:
+    1. Send messages: Ask for contact name and message content, then confirm before sending
+    2. Make calls: Ask for contact name and call type (voice/video), then confirm
+    3. Notify of messages: Announce who messaged them
+    4. Handle incoming calls: Ask if they want to accept or decline
 
-When the user wants to send a message, extract:
-- Contact name
-- Message content
+    WHEN EXTRACTING INFORMATION:
+    - Confirm contact name
+    - Confirm message or call details
+    - Wait for user approval before proceeding
 
-When the user wants to make a call, extract:
-- Contact name
-- Call type (voice or video)
+    OUTPUT ONLY: Respond directly to the user. Never describe what you're doing or thinking. Just give your answer."""
 
-For incoming notifications, clearly announce:
-- Who is calling or who sent a message
-- Wait for the user's response
+    if HAS_OPENAI_CTX:
+        # Build an OpenAI-compatible conversational context to enforce proper turn alternation
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt,
+            }
+        ]
+        context = OpenAILLMContext(messages)
+        context_aggregator = llm.create_context_aggregator(context)
 
-Be warm, friendly, and respectful at all times."""
+        # Create pipeline (context-aware)
+        pipeline = Pipeline([
+            transport.input(),
+            stt,
+            context_aggregator.user(),
+            llm,
+            tts,
+            transport.output(),
+            context_aggregator.assistant(),
+        ])
+    else:
+        # Fallback to legacy aggregators (may log deprecation warnings)
+        llm_user_aggregator = LLMUserResponseAggregator()
+        llm_assistant_aggregator = LLMAssistantResponseAggregator()
 
-    # Create response aggregators
-    llm_user_aggregator = LLMUserResponseAggregator()
-    # messages = [
-    #     {
-    #         "role": "system",
-    #         "content": system_prompt
-    #     }
-    # ]
-    # tools = get_tools()
-    # context = OpenAILLMContext(messages, tools=tools)
-    # context_aggregator = llm.create_context_aggregator(context)
-    llm_assistant_aggregator = LLMAssistantResponseAggregator()
-
-    # Create pipeline
-    pipeline = Pipeline([
-        transport.input(),
-        stt,
-        llm_user_aggregator,
-        llm,
-        tts,
-        transport.output(),
-        llm_assistant_aggregator,
-    ])
+        pipeline = Pipeline([
+            transport.input(),
+            stt,
+            llm_user_aggregator,
+            llm,
+            tts,
+            transport.output(),
+            llm_assistant_aggregator,
+        ])
 
     # Create and run task
     task = PipelineTask(

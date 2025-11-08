@@ -6,7 +6,6 @@ Handles sending and receiving text messages
 import uuid
 from datetime import datetime
 from typing import Dict, List
-import json
 
 
 class MessagingService:
