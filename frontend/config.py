@@ -18,7 +18,7 @@ class Config:
     CARTESIA_API_KEY = os.getenv('CARTESIA_API_KEY', '')
 
     # Backend URL
-    BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:5000')
+    BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 
     # Daily.co settings
     DAILY_ROOM_URL = os.getenv('DAILY_ROOM_URL', '')
