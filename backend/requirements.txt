@@ -1,5 +1,5 @@
 # Pipecat and related dependencies
-pipecat-ai>=0.0.40
+pipecat-ai>=0.0.93
 python-dotenv>=1.0.0
 aiohttp>=3.9.0
 loguru>=0.7.0
@@ -18,3 +18,8 @@ daily-python>=0.10.0
 
 # VAD
 silero-vad>=4.0.0
+
+# Web framework
+flask>=2.0.0
+
+websockets>=15.0.1
