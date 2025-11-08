@@ -5,7 +5,7 @@ aiohttp>=3.9.0
 loguru>=0.7.0
 
 # Speech-to-Text
-deepgram-sdk>=3.0.0
+deepgram-sdk>=4.7.0
 
 # Text-to-Speech
 cartesia>=1.0.0
