@@ -29,10 +29,25 @@ from loguru import logger
 from dotenv import load_dotenv
 from tools import get_tools
 
+# Optional: run a text-only simulator when TEXT_SIMULATION is enabled
+def _maybe_run_text_simulation():
+    val = os.getenv("TEXT_SIMULATION", "").strip().lower()
+    if val in {"1", "true", "yes", "y"}:
+        try:
+            from simulate_text import main as simulate_main
+        except Exception as e:
+            print("TEXT_SIMULATION requested but simulate_text could not be imported.")
+            print(f"Reason: {e}")
+            raise
+        # Run the text simulator and exit
+        simulate_main()
+        return True
+    return False
+
 load_dotenv()
 
 # Backend API endpoint
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 class ElderlyVoiceAgent:
@@ -109,12 +124,34 @@ async def create_daily_token(room_name: str, api_key: str) -> str:
 
 async def main():
     """Main entry point for the voice agent"""
+    # If text simulation is requested, run it and skip the voice pipeline
+    if _maybe_run_text_simulation():
+        return
 
+    # Gather Daily-related configuration
     daily_api_key = os.getenv("DAILY_API_KEY")
-    daily_room_name = os.getenv("DAILY_ROOM_NAME")
+    daily_room_name = os.getenv("DAILY_ROOM_NAME")  # actual room name
+    daily_domain = os.getenv("DAILY_DOMAIN")  # your Daily subdomain (e.g., 'myteam')
+    daily_room_url_env = os.getenv("DAILY_ROOM_URL")
+
+    # Create a token only if we have necessary info
+    if not daily_api_key or not daily_room_name:
+        raise ValueError(
+            "Missing DAILY_API_KEY or DAILY_ROOM_NAME. Set these or enable TEXT_SIMULATION=1 to run text-only."
+        )
+
     token = await create_daily_token(daily_room_name, daily_api_key)
-    DAILY_ROOM_URL = "https://eldervoiceagent.daily.co/ElderlyVoiceAssistantRoom"
-    #DAILY_ROOM_URL = f"https://{daily_room_name}.daily.co"
+
+    # Resolve room URL preference order:
+    # 1) Explicit DAILY_ROOM_URL
+    # 2) Compose from DAILY_DOMAIN + DAILY_ROOM_NAME
+    # 3) Fallback to example domain (demo only)
+    if daily_room_url_env:
+        room_url = daily_room_url_env
+    elif daily_domain and daily_room_name:
+        room_url = f"https://{daily_domain}.daily.co/{daily_room_name}"
+    else:
+        room_url = f"https://example.daily.co/{daily_room_name}"
 
     # Initialize transport (Daily for WebRTC)
     transport = DailyTransport(
@@ -127,7 +164,7 @@ async def main():
             vad_analyzer=SileroVADAnalyzer()
         ),
         token=token,
-        room_url=DAILY_ROOM_URL,
+        room_url=room_url,
         bot_name="ElderlyVoiceAssistant"
     )
 
@@ -139,11 +176,11 @@ async def main():
     )
 
     # Initialize LLM service (OpenAI)
-    # llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
-    llm = OpenAILLMService(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        model="gpt-4",
-    )
+    llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
+    # llm = OpenAILLMService(
+    #     api_key=os.getenv("OPENAI_API_KEY"),
+    #     model="gpt-4",
+    #)
 
     # Initialize TTS service (Cartesia)
     tts = CartesiaTTSService(
@@ -184,27 +221,27 @@ For incoming notifications, clearly announce:
 Be warm, friendly, and respectful at all times."""
 
     # Create response aggregators
-    # llm_user_aggregator = LLMUserResponseAggregator()
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt
-        }
-    ]
-    tools = get_tools()
-    context = OpenAILLMContext(messages, tools=tools)
-    context_aggregator = llm.create_context_aggregator(context)
+    llm_user_aggregator = LLMUserResponseAggregator()
+    # messages = [
+    #     {
+    #         "role": "system",
+    #         "content": system_prompt
+    #     }
+    # ]
+    # tools = get_tools()
+    # context = OpenAILLMContext(messages, tools=tools)
+    # context_aggregator = llm.create_context_aggregator(context)
     llm_assistant_aggregator = LLMAssistantResponseAggregator()
 
     # Create pipeline
     pipeline = Pipeline([
         transport.input(),
         stt,
-        context_aggregator.user(),
+        llm_user_aggregator,
         llm,
         tts,
         transport.output(),
-        context_aggregator.assistant(),
+        llm_assistant_aggregator,
     ])
 
     # Create and run task
