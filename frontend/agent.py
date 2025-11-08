@@ -7,6 +7,7 @@ import os
 import asyncio
 from pipecat.frames.frames import TextFrame, EndFrame
 from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.task import PipelineParams
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
@@ -110,10 +111,12 @@ async def main():
     daily_api_key = os.getenv("DAILY_API_KEY")
     daily_room_name = os.getenv("DAILY_ROOM_NAME")
     token = await create_daily_token(daily_room_name, daily_api_key)
+    DAILY_ROOM_URL = "https://eldervoiceagent.daily.co/ElderlyVoiceAssistantRoom"
+    #DAILY_ROOM_URL = f"https://{daily_room_name}.daily.co"
 
     # Initialize transport (Daily for WebRTC)
     transport = DailyTransport(
-        DailyParams(
+        params = DailyParams(
             api_key=os.getenv("DAILY_API_KEY"),
             audio_in_enabled=True,
             audio_out_enabled=True,
@@ -122,6 +125,7 @@ async def main():
             vad_analyzer=SileroVADAnalyzer()
         ),
         token=token,
+        room_url=DAILY_ROOM_URL,
         bot_name="ElderlyVoiceAssistant"
     )
 
@@ -194,9 +198,10 @@ Be warm, friendly, and respectful at all times."""
     # Create and run task
     task = PipelineTask(
         pipeline,
-        params={
-            "system_prompt": system_prompt
-        }
+        params = PipelineParams(
+                system_prompt= system_prompt
+        ),
+        observers=[]
     )
 
     # Start the agent
