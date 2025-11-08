@@ -7,7 +7,7 @@ This script lets you simulate the agent without audio/WebRTC by:
 - Calling the backend REST API to execute (send message or request a call)
 
 Prereqs:
-- Backend running (default http://localhost:5000)
+- Backend running (default http://localhost:8000)
 - OPENAI_API_KEY set in environment
 
 Usage:
