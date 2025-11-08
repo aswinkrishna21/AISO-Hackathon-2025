@@ -1,6 +1,4 @@
-
-# Create comprehensive README.md
-readme = """# Elderly Voice Agent
+# Elderly Voice Agent
 
 An AI-powered voice communication assistant designed specifically for elderly users, enabling them to send messages, make calls, and manage communications without needing to use phones or other technological devices directly.
 
@@ -84,7 +82,7 @@ CARTESIA_API_KEY=your_cartesia_api_key_here
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -93,7 +91,7 @@ pip install -r requirements.txt
 ```bash
 cd ../frontend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -103,7 +101,7 @@ pip install -r requirements.txt
 
 ```bash
 cd backend
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 python app.py
 ```
 
@@ -113,7 +111,7 @@ The backend server will start on `http://localhost:5000`
 
 ```bash
 cd frontend
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 python agent.py
 ```
 
@@ -267,9 +265,3 @@ For questions or issues during the hackathon, check:
 - Mobile app integration
 
 Good luck with your hackathon! 🚀
-"""
-
-with open("elderly-voice-agent/README.md", "w") as f:
-    f.write(readme)
-
-print("Created README.md")
