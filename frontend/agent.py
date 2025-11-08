@@ -81,8 +81,35 @@ class ElderlyVoiceAgent:
             return False
 
 
+async def create_daily_token(room_name: str, api_key: str) -> str:
+    """Create a Daily meeting token for the given room."""
+    if not room_name or not api_key:
+        raise ValueError("DAILY_ROOM_NAME or DAILY_API_KEY missing.")
+    url = "https://api.daily.co/v1/meeting-tokens"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "properties": {
+            "room_name": room_name,
+            "is_owner": True
+        }
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload, headers=headers) as resp:
+            data = await resp.json()
+            if resp.status != 200:
+                raise RuntimeError(f"Daily token error {resp.status}: {data}")
+            return data["token"]
+
+
 async def main():
     """Main entry point for the voice agent"""
+
+    daily_api_key = os.getenv("DAILY_API_KEY")
+    daily_room_name = os.getenv("DAILY_ROOM_NAME")
+    token = await create_daily_token(daily_room_name, daily_api_key)
 
     # Initialize transport (Daily for WebRTC)
     transport = DailyTransport(
@@ -93,7 +120,9 @@ async def main():
             transcription_enabled=True,
             vad_enabled=True,
             vad_analyzer=SileroVADAnalyzer()
-        )
+        ),
+        token=token,
+        bot_name="ElderlyVoiceAssistant"
     )
 
     # Initialize STT service (Deepgram)
