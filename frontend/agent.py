@@ -18,6 +18,7 @@ from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggr
 # from pipecat.vad.silero import SileroVADAnalyzer
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -26,6 +27,7 @@ from pipecat.services.perplexity.llm import PerplexityLLMService
 import aiohttp
 from loguru import logger
 from dotenv import load_dotenv
+from tools import get_tools
 
 load_dotenv()
 
@@ -137,11 +139,11 @@ async def main():
     )
 
     # Initialize LLM service (OpenAI)
-    llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
-    # llm = OpenAILLMService(
-    #     api_key=os.getenv("OPENAI_API_KEY"),
-    #     model="gpt-4",
-    # )
+    # llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4",
+    )
 
     # Initialize TTS service (Cartesia)
     tts = CartesiaTTSService(
@@ -182,18 +184,27 @@ For incoming notifications, clearly announce:
 Be warm, friendly, and respectful at all times."""
 
     # Create response aggregators
-    llm_user_aggregator = LLMUserResponseAggregator()
+    # llm_user_aggregator = LLMUserResponseAggregator()
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
+    tools = get_tools()
+    context = OpenAILLMContext(messages, tools=tools)
+    context_aggregator = llm.create_context_aggregator(context)
     llm_assistant_aggregator = LLMAssistantResponseAggregator()
 
     # Create pipeline
     pipeline = Pipeline([
         transport.input(),
         stt,
-        llm_user_aggregator,
+        context_aggregator.user(),
         llm,
         tts,
         transport.output(),
-        llm_assistant_aggregator
+        context_aggregator.assistant(),
     ])
 
     # Create and run task

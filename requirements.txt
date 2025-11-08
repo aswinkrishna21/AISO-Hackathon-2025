@@ -1,6 +1,6 @@
 # Pipecat and related dependencies
 pipecat-ai>=0.0.93
-pipecat[deepgram]
+# pipecat[deepgram]
 python-dotenv>=1.0.0
 aiohttp>=3.9.0
 loguru>=0.7.0
