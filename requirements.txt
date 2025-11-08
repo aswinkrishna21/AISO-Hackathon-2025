@@ -1,6 +1,7 @@
 # Pipecat and related dependencies
 pipecat-ai>=0.0.93
-python-dotenv>=1.0.0
+pipecat-ai[deepgram]
+python-dotenv
 aiohttp>=3.9.0
 loguru>=0.7.0
 
@@ -21,5 +22,9 @@ silero-vad>=4.0.0
 
 # Web framework
 flask>=2.0.0
-
+Flask-SocketIO>=5.5.1
+Flask-CORS
+python-socketio
+eventlet
+requests
 websockets>=15.0.1
