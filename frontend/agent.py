@@ -21,7 +21,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-
+from pipecat.services.perplexity.llm import PerplexityLLMService
 
 import aiohttp
 from loguru import logger
@@ -137,10 +137,11 @@ async def main():
     )
 
     # Initialize LLM service (OpenAI)
-    llm = OpenAILLMService(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        model="gpt-4"
-    )
+    llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
+    # llm = OpenAILLMService(
+    #     api_key=os.getenv("OPENAI_API_KEY"),
+    #     model="gpt-4",
+    # )
 
     # Initialize TTS service (Cartesia)
     tts = CartesiaTTSService(
