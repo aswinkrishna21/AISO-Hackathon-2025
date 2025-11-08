@@ -9,6 +9,7 @@ from flask_cors import CORS
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import json
 
 from messaging_service import MessagingService
 from call_service import CallService
@@ -30,6 +31,23 @@ notification_service = NotificationService()
 
 # Store connected clients (user_id -> session_id)
 connected_clients = {}
+# Simple helper to log function/tool calls
+def log_tool_call(action: str, payload: dict):
+    try:
+        marker = request.headers.get('X-LLM-Function') or action
+    except Exception:
+        marker = action
+    ts = datetime.now().isoformat()
+    try:
+        body = json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        body = str(payload)
+    ip = None
+    try:
+        ip = request.remote_addr
+    except Exception:
+        ip = "unknown"
+    print(f"[BACKEND][{ts}] {marker} from {ip} payload={body}")
 
 
 @app.route('/')
@@ -51,6 +69,12 @@ def send_message():
         contact = data.get('contact')
         message = data.get('message')
         sender = data.get('sender', 'user')
+
+        log_tool_call('send_message', {
+            'contact': contact,
+            'message': message,
+            'sender': sender
+        })
 
         if not contact or not message:
             return jsonify({"status": "error", "message": "Missing contact or message"}), 400
@@ -83,6 +107,12 @@ def get_message_history():
         user = request.args.get('user', 'user')
         limit = int(request.args.get('limit', 50))
 
+        log_tool_call('get_message_history', {
+            'contact': contact,
+            'user': user,
+            'limit': limit
+        })
+
         if not contact:
             return jsonify({"status": "error", "message": "Missing contact parameter"}), 400
 
@@ -103,6 +133,12 @@ def request_call():
         contact = data.get('contact')
         call_type = data.get('type', 'voice')  # 'voice' or 'video'
         caller = data.get('caller', 'user')
+
+        log_tool_call('request_call', {
+            'contact': contact,
+            'type': call_type,
+            'caller': caller
+        })
 
         if not contact:
             return jsonify({"status": "error", "message": "Missing contact"}), 400
@@ -145,6 +181,12 @@ def respond_to_call():
         call_id = data.get('call_id')
         accept = data.get('accept', False)
         user = data.get('user', 'user')
+
+        log_tool_call('respond_to_call', {
+            'call_id': call_id,
+            'accept': accept,
+            'user': user
+        })
 
         if not call_id:
             return jsonify({"status": "error", "message": "Missing call_id"}), 400
@@ -200,6 +242,10 @@ def end_call():
     try:
         data = request.json
         call_id = data.get('call_id')
+
+        log_tool_call('end_call', {
+            'call_id': call_id
+        })
 
         if not call_id:
             return jsonify({"status": "error", "message": "Missing call_id"}), 400

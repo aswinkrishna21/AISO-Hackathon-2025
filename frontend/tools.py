@@ -118,7 +118,8 @@ async def handle_send_message(args: Dict[str, Any]) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{BACKEND_URL}/api/messages/send",
-            json={"contact": contact, "message": message}
+            json={"contact": contact, "message": message},
+            headers={"X-LLM-Function": "send_message"}
         ) as resp:
             data = await resp.json()
             return data
@@ -130,7 +131,8 @@ async def handle_request_call(args: Dict[str, Any]) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{BACKEND_URL}/api/calls/request",
-            json={"contact": contact, "type": call_type}
+            json={"contact": contact, "type": call_type},
+            headers={"X-LLM-Function": "request_call"}
         ) as resp:
             data = await resp.json()
             return data
@@ -142,7 +144,8 @@ async def handle_respond_to_call(args: Dict[str, Any]) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{BACKEND_URL}/api/calls/respond",
-            json={"call_id": call_id, "accept": accept}
+            json={"call_id": call_id, "accept": accept},
+            headers={"X-LLM-Function": "respond_to_call"}
         ) as resp:
             data = await resp.json()
             return data
@@ -153,7 +156,8 @@ async def handle_end_call(args: Dict[str, Any]) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{BACKEND_URL}/api/calls/end",
-            json={"call_id": call_id}
+            json={"call_id": call_id},
+            headers={"X-LLM-Function": "end_call"}
         ) as resp:
             data = await resp.json()
             return data
@@ -164,7 +168,11 @@ async def handle_get_message_history(args: Dict[str, Any]) -> Dict[str, Any]:
     limit = int(args.get("limit", 50))
     params = {"contact": contact, "limit": str(limit)}
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{BACKEND_URL}/api/messages/history", params=params) as resp:
+        async with session.get(
+            f"{BACKEND_URL}/api/messages/history",
+            params=params,
+            headers={"X-LLM-Function": "get_message_history"}
+        ) as resp:
             data = await resp.json()
             return data
 
@@ -187,3 +195,11 @@ def get_tool_handlers() -> Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[s
         "end_call": handle_end_call,
         "get_message_history": handle_get_message_history,
     }
+
+
+def register_function_handlers(llm) -> None:
+    llm.register_function_handlers('send_message', handle_send_message)
+    llm.register_function_handlers('request_call', handle_request_call)
+    llm.register_function_handlers('respond_to_call', handle_respond_to_call)
+    llm.register_function_handlers('end_call', handle_end_call)
+    llm.register_function_handlers('get_message_history', handle_get_message_history)
