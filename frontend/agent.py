@@ -10,11 +10,17 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
-from pipecat.services.deepgram import DeepgramSTTService
-from pipecat.services.openai import OpenAILLMService
-from pipecat.services.cartesia import CartesiaTTSService
-from pipecat.transports.services.daily import DailyTransport, DailyParams
-from pipecat.vad.silero import SileroVADAnalyzer
+# from pipecat.services.deepgram import DeepgramSTTService
+# from pipecat.services.openai import OpenAILLMService
+# from pipecat.services.cartesia import CartesiaTTSService
+# from pipecat.transports.services.daily import DailyTransport, DailyParams
+# from pipecat.vad.silero import SileroVADAnalyzer
+from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.transports.daily.transport import DailyTransport, DailyParams
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+
 
 import aiohttp
 from loguru import logger
