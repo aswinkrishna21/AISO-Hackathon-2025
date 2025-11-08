@@ -20,6 +20,12 @@ daily-python>=0.10.0
 silero-vad>=4.0.0
 
 # Web framework
-flask>=2.0.0
+Flask 
+Flask-SocketIO 
+Flask-CORS 
+python-socketio 
+eventlet 
+python-dotenv 
+requests
 
 websockets>=15.0.1
