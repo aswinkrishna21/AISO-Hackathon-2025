@@ -16,56 +16,77 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.perplexity.llm import PerplexityLLMService
-# Services
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
-
-# FastAPI Websocket transport (no Twilio)
 from pipecat.transports.network.fastapi_websocket import (
     FastAPIWebsocketTransport,
     FastAPIWebsocketParams,
 )
+from pipecat.transports.serializers.fastapi_websocket_serializer import FastAPIWebsocketSerializer
 
-# Project-specific tools
-from tools import get_tools
+
 from system_prompt import SYSTEM_PROMPT
+from tools import get_tools
 
+from pipecat.processors.frame_processor import FrameProcessor
 
-# Custom processor to log transcribed text
-class TranscriptionLogger(FrameProcessor):
+class FrameLogger(FrameProcessor):
     async def process_frame(self, frame, direction):
-        await super().process_frame(frame, direction)
-        
+        # Print type of frame
+        print(f"[FRAME] {type(frame).__name__}")
+
+        # Print additional info depending on frame type
         if isinstance(frame, TextFrame):
-            print(f"🎤 TRANSCRIBED TEXT: '{frame.text}'")
+            print(f"  Text: {frame.text}")
         elif isinstance(frame, AudioRawFrame):
-            print(f"🔊 AUDIO FRAME: {len(frame.audio)} bytes, {frame.sample_rate}Hz, {frame.num_channels} channels")
-            
-        return frame
+            print(f"  Audio length: {len(frame.audio)} bytes, Sample rate: {frame.sample_rate}")
+        else:
+            print(f"  Other frame: {frame}")
+
+        return await super().process_frame(frame, direction)
 
 
-# Custom processor to log all input frames
+# ---------------- LOGGERS ---------------- #
 class InputLogger(FrameProcessor):
     async def process_frame(self, frame, direction):
-        await super().process_frame(frame, direction)
-        
-        if isinstance(frame, AudioRawFrame):
-            print(f"📥 INPUT AUDIO: {len(frame.audio)} bytes at {frame.sample_rate}Hz")
-        elif isinstance(frame, TextFrame):
-            print(f"📥 INPUT TEXT: '{frame.text}'")
-        else:
-            print(f"📥 INPUT FRAME: {type(frame).__name__}")
-            
-        return frame
+        print(f"[INPUT] {type(frame).__name__}")
+        return await super().process_frame(frame, direction)
 
 
+class TranscriptionLogger(FrameProcessor):
+    async def process_frame(self, frame, direction):
+        if isinstance(frame, TextFrame):
+            print(f"[TRANSCRIPTION] {frame.text}")
+        return await super().process_frame(frame, direction)
+
+
+# ---------------- CUSTOM RN INTERCEPTOR ---------------- #
+class ReactNativeInputInterceptor(FrameProcessor):
+    """
+    Handles base64 audio or text JSON *after* the transport receives them.
+    The transport converts WebSocket messages → TextFrame or AudioRawFrame automatically.
+    """
+
+    async def process_frame(self, frame, direction):
+        if isinstance(frame, TextFrame):
+            txt = frame.text.strip()
+            if txt.lower() == "stop":
+                print("🛑 Received stop command (ignored, Pipecat handles control flow)")
+            else:
+                print(f"[RN TEXT] {txt}")
+
+        elif isinstance(frame, AudioRawFrame):
+            print(f"[RN AUDIO] {len(frame.audio)} bytes")
+
+        return await super().process_frame(frame, direction)
+
+
+# ---------------- MAIN APP ---------------- #
 load_dotenv(override=True)
 app = FastAPI()
 
-# Add CORS for React Native
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -77,7 +98,6 @@ app.add_middleware(
 
 @app.get("/")
 async def index():
-    """Simple HTML test page for manual connection."""
     html = """
     <!DOCTYPE html>
     <html>
@@ -96,81 +116,10 @@ async def index():
     return HTMLResponse(content=html)
 
 
-# Custom frame processor to handle React Native data
-class ReactNativeFrameProcessor:
-    def __init__(self, task):
-        self.task = task
-
-    async def process_message(self, data):
-        """Process incoming WebSocket message and convert to frames"""
-        try:
-            if isinstance(data, bytes):
-                # Binary audio data
-                print(f"Received {len(data)} bytes of audio data")
-                audio_frame = AudioRawFrame(
-                    audio=data,
-                    sample_rate=16000,
-                    num_channels=1
-                )
-                await self.task.queue_frames([audio_frame])
-                
-            elif isinstance(data, str):
-                print(f"Received text: {data[:100]}...")
-                
-                try:
-                    # Try to parse as JSON
-                    json_data = json.loads(data)
-                    
-                    # Handle base64 encoded audio
-                    if "audio" in json_data:
-                        audio_b64 = json_data["audio"]
-                        audio_bytes = base64.b64decode(audio_b64)
-                        print(f"Decoded {len(audio_bytes)} bytes from base64 audio")
-                        
-                        audio_frame = AudioRawFrame(
-                            audio=audio_bytes,
-                            sample_rate=16000,
-                            num_channels=1
-                        )
-                        await self.task.queue_frames([audio_frame])
-                    
-                    # Handle text messages as direct input
-                    elif "text" in json_data:
-                        text_content = json_data["text"]
-                        print(f"Processing text input: {text_content}")
-                        text_frame = TextFrame(text=text_content)
-                        await self.task.queue_frames([text_frame])
-                    
-                    # Handle control messages
-                    elif "command" in json_data:
-                        cmd = json_data["command"].lower()
-                        if cmd == "stop":
-                            print("Received stop command")
-                            return False  # Signal to stop
-                
-                except json.JSONDecodeError:
-                    # Plain text - treat as direct user input
-                    if data.strip().lower() == "stop":
-                        print("Received stop command")
-                        return False
-                    else:
-                        print(f"Processing plain text input: {data}")
-                        text_frame = TextFrame(text=data.strip())
-                        await self.task.queue_frames([text_frame])
-            
-            return True  # Continue processing
-            
-        except Exception as e:
-            print(f"Error processing message: {e}")
-            import traceback
-            traceback.print_exc()
-            return True
-
-
+# ---------------- BOT STREAM ---------------- #
 async def run_bot_stream(websocket_client: WebSocket):
     print("Starting live audio stream bot...")
 
-    # Custom transport params for React Native
     transport = FastAPIWebsocketTransport(
         websocket=websocket_client,
         params=FastAPIWebsocketParams(
@@ -178,34 +127,30 @@ async def run_bot_stream(websocket_client: WebSocket):
             audio_out_enabled=True,
             add_wav_header=False,
             vad_analyzer=SileroVADAnalyzer(),
-            serializer=None,  # No Twilio serializer
+            serializer=FastAPIWebsocketSerializer(),
         ),
     )
 
-    # AI Services - using Perplexity with simplified context (no tools for now)
+    # AI services
     llm = PerplexityLLMService(api_key=os.getenv("PERPLEXITY_API_KEY"), model="sonar")
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"), audio_passthrough=True)
     tts = DeepgramTTSService(api_key=os.getenv("DEEPGRAM_API_KEY"), voice="aura-2-andromeda-en")
 
-    # Initialize conversation context - Perplexity needs simpler message format
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
-    
-    # Create proper context object for Perplexity (no tools)
+    # Context
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     context = OpenAILLMContext(messages)
     context_aggregator = llm.create_context_aggregator(context)
 
-    # Add loggers for debugging
-    input_logger = InputLogger()
-    transcription_logger = TranscriptionLogger()
-
+    # Pipeline
     pipeline = Pipeline(
         [
             transport.input(),
-            input_logger,       # Log all input frames first
+            FrameLogger(),
+            InputLogger(),
+            ReactNativeInputInterceptor(),   # ✅ Your custom handler
+            InputLogger(),
             stt,
-            transcription_logger,  # Log transcribed text here
+            TranscriptionLogger(),
             context_aggregator.user(),
             llm,
             tts,
@@ -217,67 +162,50 @@ async def run_bot_stream(websocket_client: WebSocket):
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
-            audio_in_sample_rate=16000,  # React Native standard
+            audio_in_sample_rate=16000,
             audio_out_sample_rate=16000,
             allow_interruptions=True,
             enable_metrics=True,
             enable_usage_metrics=True,
-        ),
+        )
     )
 
     runner = PipelineRunner(handle_sigint=False, force_gc=True)
 
-    # Create frame processor
-    frame_processor = ReactNativeFrameProcessor(task)
-
-    # Start pipeline in background
-    print("Starting pipeline...")
+    # Start the pipeline (it now owns the websocket)
+    print("✅ Starting pipeline...")
     pipeline_task = asyncio.create_task(runner.run(task))
-    
-    # Send welcome message after a brief delay to ensure pipeline is ready
+
+    # Warm-up: send initial message
     await asyncio.sleep(0.5)
-    # Add a user message first to satisfy Perplexity's requirements
     messages.append({"role": "user", "content": "Hello, please introduce yourself."})
     await task.queue_frames([LLMRunFrame()])
-    print("Pipeline started and welcome message queued")
 
-    # Let the transport handle the WebSocket, but we can still process custom messages
-    # by using the transport's message handling capabilities
+    # Wait until pipeline exits (user disconnect, error, etc.)
     try:
-        # Just wait for the pipeline to complete
-        # The transport will handle all WebSocket communication
         await pipeline_task
-        
+    except asyncio.CancelledError:
+        pass
     except Exception as e:
-        print(f"Error in pipeline: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Pipeline error: {e}")
 
-    print("Pipeline completed")
+    print("Pipeline closed.")
 
 
+# ---------------- ENDPOINT ---------------- #
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("WebSocket connection accepted from React Native app")
-    try:
-        await run_bot_stream(websocket)
-    except Exception as e:
-        print(f"Error in websocket endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        try:
-            await websocket.close()
-        except:
-            pass
+    print("✅ WebSocket connection accepted.")
+    await run_bot_stream(websocket)
 
 
+# ---------------- MAIN ---------------- #
 if __name__ == "__main__":
     import uvicorn
-    
+
     print("Starting server...")
-    print(f"OpenAI API Key: {'Set' if os.getenv('OPENAI_API_KEY') else 'NOT SET'}")
-    print(f"Deepgram API Key: {'Set' if os.getenv('DEEPGRAM_API_KEY') else 'NOT SET'}")
-    
+    print(f"PERPLEXITY API: {'Set' if os.getenv('PERPLEXITY_API_KEY') else 'NOT SET'}")
+    print(f"DEEPGRAM API: {'Set' if os.getenv('DEEPGRAM_API_KEY') else 'NOT SET'}")
+
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8765")))

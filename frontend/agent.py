@@ -16,6 +16,7 @@ from pipecat.pipeline.task import PipelineTask
 # from pipecat.transports.services.daily import DailyTransport, DailyParams
 # from pipecat.vad.silero import SileroVADAnalyzer
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.deepgram.tts import DeepgramTTSService
 # from pipecat.services.openai.llm import OpenAILLMService
 # Prefer OpenAI-style context aggregator; fall back to legacy aggregators if not available in this environment
 try:
@@ -152,10 +153,10 @@ async def main():
     #     model="gpt-4o",
     # )
 
-    # Initialize TTS service (Cartesia)
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="a0e99841-438c-4a64-b679-ae501e7d6091"  # Friendly, clear voice
+    # Initialize TTS service (Deepgram)
+    tts = DeepgramTTSService(
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
+        voice="aura-2-andromeda-en"
     )
 
     # Define system prompt for elderly-friendly interaction
@@ -232,4 +233,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    print(os.getenv("PERPLEXITY_API_KEY"))
+    print(os.getenv("DEEPGRAM_API_KEY"))
     asyncio.run(main())
